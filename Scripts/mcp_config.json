@@ -1,0 +1,25 @@
+{
+    "gmail": {
+      "command": "npx",
+      "args": [
+        "--no-install",
+        "gmail-mcp"
+      ],
+      "transport": "stdio"
+    },
+    "yahoo-finance": {
+      "command": "uvx",
+      "args": ["yahoo-finance-server"],
+      "transport": "stdio"
+    },
+    "google-calendar": {
+    "command": "npx",
+    "args": [
+      "@cocal/google-calendar-mcp"
+    ],
+    "env": {
+      "GOOGLE_OAUTH_CREDENTIALS": "C:/Users/Owner/.gmail-mcp/gcp-oauth.keys.json"
+    },
+    "transport": "stdio"
+  }
+}

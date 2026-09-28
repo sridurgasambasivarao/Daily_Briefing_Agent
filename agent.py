@@ -26,9 +26,6 @@ if sys.platform == "win32":
 
 model = ChatGoogleGenerativeAI(model="gemini-3.1-flash-lite")
 
-checkpointer = InMemorySaver()
-
-
 async def get_tools():     
     tools = []
 
@@ -70,7 +67,7 @@ async def get_tools():
         return tools
     
 
-async def get_briefing(query, thread_id='default'):
+async def get_agent():
     tools = await get_tools()
 
     system_prompt = prompts.get_daily_briefing_prompt()
@@ -78,35 +75,9 @@ async def get_briefing(query, thread_id='default'):
     agent = create_agent(
         model=model,
         tools=tools,
-        system_prompt=system_prompt,
-        checkpointer=checkpointer
+        system_prompt=system_prompt
     )
+    
+    return agent
 
-    config = {"configurable": {"thread_id": thread_id}}
-    result = await agent.ainvoke({'messages': [HumanMessage(query)]}, config=config)
-
-    response = result['messages'][-1].text
-
-    print("\n============== Output =============")
-    print(response)
-
-async def ask():
-    print("\nChat mode started. Type 'q' or 'quite' to exit.\n")
-    while True:
-        print("\n\n\nAsk Question. Type 'q' or 'quite' to exit.")
-        query = input("You: ").strip()
-
-        if query.lower() in ["q", "quite"]:
-            print("Exiting chat mode.")
-            break
-
-        await get_briefing(query)
-
-if __name__ == "__main__":
-    query = """Give me my daily briefing:
-                   1. Today's weather
-                   2. Today's calendar events
-                   3. Summary of unread emails
-                   4. Top news headlines"""
-    asyncio.run(get_briefing(query))
-    # asyncio.run(get_tools())
+agent = asyncio.run(get_agent())

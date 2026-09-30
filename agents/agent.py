@@ -104,7 +104,7 @@ async def get_agent(explicit_tools: Optional[List[BaseTool]] = None, mcp_client:
     
     return agent
 
-# --- Production Usage ---
-# Build the agent ONCE at startup using standard live initialization
-if __name__ == "__main__":
-    agent = asyncio.run(get_agent())
+# Add an explicit, parameter-free async factory function for the LangGraph CLI
+async def create_production_agent():
+    """LangGraph API will await this function at startup."""
+    return await get_agent()

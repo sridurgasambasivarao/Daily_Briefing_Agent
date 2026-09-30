@@ -8,6 +8,12 @@ from requests.exceptions import HTTPError, Timeout
 
 logger = logging.getLogger(__name__)
 
+WEATHER_CODES = {
+    0: "Clear sky", 1: "Mainly clear", 2: "Partly cloudy", 3: "Overcast",
+    45: "Foggy", 48: "Icy fog", 51: "Light drizzle", 61: "Slight rain",
+    71: "Slight snow", 80: "Slight showers", 95: "Thunderstorm",
+}
+
 def _format_location(loc: dict) -> str:
     name     = loc.get("name", "Unknown")
     country  = loc.get("country", "Unknown")
@@ -130,9 +136,14 @@ def get_weather_by_coords(latitude: float, longitude: float) -> str:
           -180.0 and 180.0.
     
     Returns:
-        a string describing current temperature and wind speed
+        A string describing the current weather condition, temperature, and wind speed.
     
     """
+
+    if not (-90.0 <= latitude <= 90.0):
+        return "Invalid latitude: must be between -90.0 and 90.0."
+    if not (-180.0 <= longitude <= 180.0):
+        return "Invalid longitude: must be between -180.0 and 180.0."
 
     url = f"https://api.open-meteo.com/v1/forecast"
     params = {"latitude": latitude, "longitude": longitude, "current": "temperature_2m,weather_code,wind_speed_10m"}    
@@ -145,19 +156,35 @@ def get_weather_by_coords(latitude: float, longitude: float) -> str:
 
         data = response.json()
         current = data.get("current", {})
+        units = data.get("current_units", {})
+
         temp = current.get("temperature_2m")
         wind = current.get("wind_speed_10m")
+        code = current.get("weather_code")
 
-        return f"Current temperature: {temp}°C, Wind speed: {wind} km/h."
+        if temp is None or wind is None:
+            return "Weather data unavailable for the given coordinates."
+
+        temp_unit = units.get("temperature_2m", "°C")
+        wind_unit = units.get("wind_speed_10m", "km/h")
+        condition = WEATHER_CODES.get(code, "Unknown condition")        
+
+        return f"Current weather: {condition}, Temperature: {temp}{temp_unit}, Wind speed: {wind}{wind_unit}."
     
     except HTTPError as http_err:
         # Handles bad credentials, invalid cities (404), or server outages (500)
+        logger.error(f"HTTP error occurred: {http_err}")
         return f"HTTP error occurred: {http_err}"
     
     except Timeout:
         # Handles situations where the weather server took longer than 10 seconds to respond
+        logger.error("The request timed out. Please try again later.")
         return "The request timed out. Please try again later."
-    
-    except Exception as err:
-        # Handles any other unexpected errors
-        return "Error fetching weather data."
+
+    except requests.exceptions.ConnectionError:
+        logger.error("Could not connect to the weather service. Check your network connection.")
+        return "Could not connect to the weather service. Check your network connection."
+
+    except Exception:
+        logger.error("Unexpected error fetching weather data", exc_info=True)
+        return "Unexpected error fetching weather data."

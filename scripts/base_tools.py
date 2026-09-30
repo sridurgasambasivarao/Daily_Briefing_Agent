@@ -8,6 +8,20 @@ from requests.exceptions import HTTPError, Timeout
 
 logger = logging.getLogger(__name__)
 
+def _format_location(loc: dict) -> str:
+    name     = loc.get("name", "Unknown")
+    country  = loc.get("country", "Unknown")
+    region   = loc.get("admin1", "")
+    lat      = loc.get("latitude")
+    lon      = loc.get("longitude")
+    timezone = loc.get("timezone", "UTC")
+
+    full_name = f"{name}, {region}, {country}" if region else f"{name}, {country}"
+    fmt_coord = lambda v, label: f"{label}: {v}" if v is not None else f"{label}: N/A"
+    coords    = f"{fmt_coord(lat, 'Lat')}, {fmt_coord(lon, 'Lon')}"
+
+    return f"{full_name} | {coords} | Timezone: {timezone}"
+
 @tool(parse_docstring=True)
 def web_search(query: str) -> str:
     """
@@ -50,36 +64,58 @@ def web_search(query: str) -> str:
 
 
 @tool(parse_docstring=True)
-def search_location(city_name: str) -> str:
+def search_location(city_name: str, count: int = 5) -> str:
     """
     Retrieves timezone, latitude and longitude coordinates for a given city name using 
     Open-Meteo's Geocoding API.
+    Returns multiple matches if the name is ambiguous.
     
     Args:
         city_name: name of city as a string
+        count: max number of results to return (default 5)
     
     Returns:
-        a string describing country, latitude, longitude and timezone.
+        a string listing all matching locations with country, region,
+        latitude, longitude and timezone.
     
     """
 
+    if not city_name or not city_name.strip():
+        return "City name cannot be empty."
+
     url = "https://geocoding-api.open-meteo.com/v1/search"
-    params = {"name": city_name, "count": 1}
-    
-    response = requests.get(url, params=params)
-    data = response.json()
-    
-    if "results" not in data or not data["results"]:
-        return f"No coordinates found for {city_name}."
-    
-    loc = data["results"][0]
-    name = loc.get("name")
-    country = loc.get("country", "")
-    lat = loc.get("latitude")
-    lon = loc.get("longitude")
-    timezone = loc.get("timezone", "UTC")
-    
-    return f"Location: {name}, {country} | Lat: {lat}, Lon: {lon} | Timezone: {timezone}"
+    params = {"name": city_name.strip(), "count": count}
+
+    try:
+        response = requests.get(url, params=params, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+    except requests.exceptions.Timeout:
+        logger.exception("search_location did timeoutfor city_name=%r", city_name)
+        return f"Request timed out while searching for '{city_name}'."
+    except requests.exceptions.HTTPError as e:
+        logger.exception("search_location encountered HTTP error for city_name=%r", city_name)
+        return f"API error for '{city_name}': {e}"
+    except requests.exceptions.RequestException as e:
+        logger.exception("search_location encountered network error for city_name=%r", city_name)
+        return f"Network error while searching for '{city_name}': {e}"
+    except ValueError:
+        logger.exception("search_location failed to parse API response for city_name=%r", city_name)
+        return "Failed to parse API response."
+
+    results = data.get("results", [])
+    if not results:
+        return f"No coordinates found for '{city_name}'."
+
+    if len(results) == 1:
+        loc = results[0]
+        return _format_location(loc)
+
+    # Multiple matches — list them all with an index
+    lines = [f"Multiple locations found for '{city_name}':"]
+    for i, loc in enumerate(results, start=1):
+        lines.append(f"  {i}. {_format_location(loc)}")
+    return "\n".join(lines)    
 
 @tool(parse_docstring=True)
 def get_weather_by_coords(latitude: float, longitude: float) -> str:    

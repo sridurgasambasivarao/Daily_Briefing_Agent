@@ -11,5 +11,7 @@ dependencies = [
     "langchain-mcp-adapters>=0.3.2",
     "langgraph-cli[inmem]>=0.4.32",
     "ollama>=0.6.2",
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
     "python-dotenv>=1.2.3",
 ]

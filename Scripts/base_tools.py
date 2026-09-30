@@ -1,37 +1,67 @@
 import os
+import json
 import requests
+import logging
 from ollama import Client
 from langchain.tools import tool
 from requests.exceptions import HTTPError, Timeout
 
-@tool
-def web_search(query: str):
-    """
-    Perform a live web search using Ollama Cloud Web Search API for real-time information 
-    and news.
+logger = logging.getLogger(__name__)
 
-    Input:
+@tool(parse_docstring=True)
+def web_search(query: str) -> str:
+    """
+    Perform a live web search using Ollama Cloud Web Search API for real-time information and news.
+
+    Args:
         query: search query string
 
-    Output:
+    Returns:
         JSON string of top results (max_results=2).
-    """    
+    """  
+    query = query.strip()
+    if not query:
+        return json.dumps({"error": "Empty search query."})
 
-    # 1. Explicitly initialize a dedicated remote client pointing to the cloud service
-    cloud_client = Client(
-        host="https://ollama.com",
-        headers={"Authorization": f"Bearer {os.getenv('OLLAMA_API_KEY')}"}
-    )
+    api_key = os.getenv("OLLAMA_API_KEY")
+    if not api_key:
+        return json.dumps({"error": "OLLAMA_API_KEY is not set."})  
+
+    try:
+        # Explicitly initialize a dedicated remote client pointing to the cloud service
+        cloud_client = Client(
+            host="https://ollama.com",
+            headers={"Authorization": f"Bearer {api_key}"},
+        )
+        response = cloud_client.web_search(query=query, max_results=2)
+    except Exception as ex:
+        logger.exception("web_search failed for query=%r", query)
+        return json.dumps({"error": f"Web search failed: {ex}"})
     
-    response = cloud_client.web_search(query=query, max_results=2)
-    
-    return 
+    results = [
+        {"title": r.title, "content": r.content}
+        for r in response.results
+    ]
+
+    # By default, json.dumps escapes every non-ASCII character into a \uXXXX sequence. ensure_ascii=False tells it to leave those characters as they are.
+    # For non-English search results (or even English ones with accents, curly quotes, or em dashes), the escaped version can inflate token usage noticeably.
+    # LLMs handle actual characters better than escape sequences.
+    return json.dumps({"query": query, "results": results}, ensure_ascii=False)
 
 
-@tool
+@tool(parse_docstring=True)
 def search_location(city_name: str) -> str:
-    """Retrieves timezone, latitude and longitude coordinates for a given city name using 
-    Open-Meteo's Geocoding API."""
+    """
+    Retrieves timezone, latitude and longitude coordinates for a given city name using 
+    Open-Meteo's Geocoding API.
+    
+    Args:
+        city_name: name of city as a string
+    
+    Returns:
+        a string describing country, latitude, longitude and timezone.
+    
+    """
 
     url = "https://geocoding-api.open-meteo.com/v1/search"
     params = {"name": city_name, "count": 1}
@@ -51,10 +81,22 @@ def search_location(city_name: str) -> str:
     
     return f"Location: {name}, {country} | Lat: {lat}, Lon: {lon} | Timezone: {timezone}"
 
-@tool
+@tool(parse_docstring=True)
 def get_weather_by_coords(latitude: float, longitude: float) -> str:    
 
-    """Get current weather information for a specific latitude and longitude."""
+    """
+    Get current weather information for a specific latitude and longitude.
+    
+    Args:
+        latitude: The latitude coordinate of the location. Must be between -90.0
+          and 90.0.
+        longitude: The longitude coordinate of the location. Must be between
+          -180.0 and 180.0.
+    
+    Returns:
+        a string describing current temperature and wind speed
+    
+    """
 
     url = f"https://api.open-meteo.com/v1/forecast"
     params = {"latitude": latitude, "longitude": longitude, "current": "temperature_2m,weather_code,wind_speed_10m"}    

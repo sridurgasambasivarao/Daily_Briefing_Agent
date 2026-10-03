@@ -2,8 +2,7 @@
     "gmail": {
       "command": "npx",
       "args": [
-        "--no-install",
-        "gmail-mcp"
+        "@gongrzhe/server-gmail-autoauth-mcp"
       ],
       "transport": "stdio"
     },
